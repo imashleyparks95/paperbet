@@ -4,8 +4,11 @@ Independent, mobile-first virtual-money sportsbook. No Little Big Arcade source,
 
 ## Current delivery status
 
-Implemented runnable Node 24 application with a persistent SQLite ledger, background settlement, key-free ESPN public-feed adapter, optional The Odds API adapter, single moneylines, journals, session resets, stats, JSON exports and PWA shell. **Not deployed.** Live ESPN NFL scoreboard accessibility and published moneyline fields were checked through web research; end-to-end runtime access, coverage across all leagues, mobile Safari and Home Screen installation remain unverified. No real-world bet was placed or settled during development. Automated fixtures are restricted to tests and never loaded by the production application.
+The existing application has been continued as **v1.1.0**, adding a separate owner-private Sites HTTPS deployment with Cloudflare Workers and durable D1 storage. The Node/SQLite edition is retained. No Little Big Arcade files, project, storage or deployment are involved.
 
+Live feed checks found and fixed two production adapter defects: NFL date-range requests fail, so fixtures are fetched by individual UTC day; odds arrays can contain null entries. Live access/coverage evidence is in `docs/live-coverage.json`; an actual ESPN final is in `docs/live-result.json`. These files are observations, never production input. No fallback odds/results are generated.
+
+See `docs/HOSTED_OPERATIONS.md` for hosted architecture, scheduler setup, privacy, migration and verification limits.
 ## Run
 
 Requires Node.js 24 or later. No npm dependencies or installation required.
@@ -66,7 +69,7 @@ Use an always-on Node/Docker host with a persistent volume (for example a small 
 - Back up SQLite consistently using SQLite's online backup facility; do not copy an active main database file while ignoring its WAL. Encrypt backups and test restoration. Preserve the session secret.
 - Check `/api/state` for settlement health. Alert on missed checks and unresolved bets. Monitor public feed availability/schema changes.
 
-The available Sites hosting integration targets Cloudflare Workers; this standalone Node/SQLite server is not a compatible Worker artifact. No unrelated Site was created or replaced. A separate compatible Node host or a port to Worker/D1 is required before a deployment URL can be supplied.
+The original Node/SQLite artifact is not a Worker. The new `npm run build:worker` creates the hosted Worker artifact from the same UI/domain/feed code, with the asynchronous D1 adapter and embedded static assets. `.openai/hosting.json` selects only the independent PaperBet project. Sites applies the committed `drizzle/` schema migrations; runtime handlers never create tables. `npm run build` still produces the optional standalone Node edition. Never deploy that Node artifact to Sites.
 
 ## Verification limits
 
