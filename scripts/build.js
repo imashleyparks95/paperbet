@@ -1,0 +1,2 @@
+import {mkdirSync,cpSync,rmSync,readFileSync} from 'node:fs';
+JSON.parse(readFileSync('public/manifest.webmanifest'));rmSync('dist',{recursive:true,force:true});mkdirSync('dist/data',{recursive:true});for(const f of ['server.js','provider.js','espn.js','store.js','domain.js','package.json','public'])cpSync(f,'dist/'+f,{recursive:true});console.log('Production bundle created in dist/ (no dependencies, no secrets, no database).');
