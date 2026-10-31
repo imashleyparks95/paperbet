@@ -1,5 +1,5 @@
 import {ESPNProvider} from '../espn.js';
-import {stakeCents,leagues} from '../domain.js';
+import {stakeCents,leagues,parlayOdds} from '../domain.js';
 import {D1Store} from './d1-store.js';
 const ASSETS = {}; // Build embeds the existing public/ files here.
 const provider=new ESPNProvider();
@@ -10,10 +10,11 @@ export async function settleHosted(store,p=provider){
  if(!lease)return {busy:true};
  let checked=0,errors=[];
  try{
-  const pending=await store.all("SELECT event_id,league,MIN(checked_at) AS last_checked FROM bets WHERE status IN ('open','live','unresolved') AND start<=? AND checked_at<? GROUP BY event_id,league ORDER BY last_checked LIMIT 20",now,now-240000);
-  for(let i=0;i<pending.length;i+=4)await Promise.all(pending.slice(i,i+4).map(async b=>{try{for(const r of await p.scores(b.league,[b.event_id]))await store.settle(r,p.source);checked++;}catch(e){errors.push(b.league+': '+e.message);}finally{await store.q('UPDATE bets SET checked_at=? WHERE event_id=? AND league=?',Date.now(),b.event_id,b.league).run();}}));
-  const remaining=await store.q("SELECT COUNT(DISTINCT event_id) AS n FROM bets WHERE status IN ('open','live','unresolved') AND start<=? AND checked_at<?",Date.now(),Date.now()-240000).first();
-  const health={checkedAt:Date.now(),checked,remaining:remaining.n,error:errors.length?errors.join('; '):null,cadence:'Cloud task every 30 minutes; retries on next run; no browser required'};
+  const pending=await store.dueEvents(now);
+  for(let i=0;i<pending.length;i+=4)await Promise.all(pending.slice(i,i+4).map(async b=>{try{for(const r of await p.scores(b.league,[b.event_id]))await store.settle(r,p.source);checked++;}catch(e){errors.push(b.league+': '+e.message);}finally{await store.markChecked(b.event_id,b.league);}}));
+  await store.recoverParlays();
+  const remaining={n:(await store.dueEvents()).length};
+  const health={checkedAt:Date.now(),checked,remaining:remaining.n,error:errors.length?errors.join('; '):null,cadence:'Cloud task hourly; retries on next run; no browser required'};
   await store.q('INSERT INTO health VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value','settlement',JSON.stringify(health)).run();return health;
  }finally{await store.q("UPDATE jobs SET lease_until=0 WHERE key='settlement'").run();}
 }
@@ -31,6 +32,7 @@ async function identity(request,secret){
 export async function handle(request,env,ctx={},p=provider){
  const url=new URL(request.url);
  try{
+  if(request.method==='POST'&&request.headers.get('origin')&&request.headers.get('origin')!==url.origin)return json({error:'Cross-origin request blocked'},403);
   if(url.pathname==='/mcp'&&request.method==='POST'){
    const rpc=await request.json();let result;
    if(rpc.method==='server/discover')result={supportedVersions:['2026-07-28'],capabilities:{tools:{}}};
@@ -58,21 +60,30 @@ export async function handle(request,env,ctx={},p=provider){
   // updater; no simulated outcome input exists. Never expose it on a public Site.
   if(url.pathname==='/api/admin/settle'&&request.method==='POST')return json(await settleHosted(store,p));
   if(url.pathname.startsWith('/api/admin/'))return json({error:'Hosted reconciliation is unavailable; unresolved exceptions require reviewed implementation'},404);
-  if(url.pathname==='/api/health'&&request.method==='GET')return json({version:'1.1.0',storage:'D1',source:p.source,settlement:JSON.parse((await store.q("SELECT value FROM health WHERE key='settlement'").first())?.value||'null')});
+  if(url.pathname==='/api/health'&&request.method==='GET')return json({version:'1.2.0',storage:'D1',source:p.source,settlement:JSON.parse((await store.q("SELECT value FROM health WHERE key='settlement'").first())?.value||'null')});
   const who=await identity(request,env.SESSION_SECRET),send=(data,status=200)=>json(data,status,who.cookie?{'Set-Cookie':who.cookie}:{}),user=who.user;
-  if(url.pathname==='/api/state'&&request.method==='GET')return send({...await store.snapshot(user,Object.fromEntries(url.searchParams)),identityMode:request.headers.has('oai-authenticated-user-id')?'ChatGPT sign-in':'browser session',connected:true,source:p.source,quota:null,settlement:JSON.parse((await store.q("SELECT value FROM health WHERE key='settlement'").first())?.value||'null')});
+  if(url.pathname==='/api/state'&&request.method==='GET')return send({...await store.snapshot(user,Object.fromEntries(url.searchParams)),identityMode:request.headers.has('oai-authenticated-user-id')?'ChatGPT sign-in':'browser session',parlaysSupported:true,connected:true,source:p.source,quota:null,settlement:JSON.parse((await store.q("SELECT value FROM health WHERE key='settlement'").first())?.value||'null')});
   if(url.pathname==='/api/leagues'&&request.method==='GET')return send({leagues,configured:true});
   if(url.pathname==='/api/events'&&request.method==='GET'){const events=await p.events(url.searchParams.get('league'));return send({events,source:p.source,fetchedAt:Date.now(),coverage:p.coverage});}
   if(url.pathname==='/api/bets'&&request.method==='POST'){
    if(!/^[\w-]{16,100}$/.test(body.requestId||''))throw Error('Valid request identifier required');
    const duplicate=await store.duplicate(user,body.requestId);if(duplicate)return send({bet:duplicate});
-   const stake=stakeCents(body.stake),event=await p.verify(body.league,body.eventId,body.bookmakerKey),outcome=event.outcomes.find(o=>o.name===body.selection);
+   const stake=stakeCents(body.stake);
+   if(body.legs!==undefined){
+    if(!Array.isArray(body.legs)||body.legs.length<2||body.legs.length>8)throw Error('Choose 2–8 legs from different games');
+    if(new Set(body.legs.map(l=>l.eventId)).size!==body.legs.length)throw Error('Same-game parlays are not supported');
+    const verified=[];for(const l of body.legs){const event=await p.verify(l.league,l.eventId,l.bookmakerKey),outcome=event.outcomes.find(o=>o.name===l.selection);if(!outcome)throw Error('A parlay selection is no longer available');verified.push({event,outcome});}
+    parlayOdds(verified);
+    if(verified.some((l,i)=>l.outcome.price!==body.legs[i].odds))return send({error:'Parlay odds changed. Review every leg and accept the new prices.',legs:verified},409);
+    return send({bet:await store.placeParlay(user,body.requestId,verified,stake,String(body.note||''),body.sessionId)},201);
+   }
+   const event=await p.verify(body.league,body.eventId,body.bookmakerKey),outcome=event.outcomes.find(o=>o.name===body.selection);
    if(!outcome)throw Error('Selection no longer available');if(outcome.price!==body.odds)return send({error:'Odds changed. Review and accept the new price.',event,outcome},409);
    return send({bet:await store.place(user,body.requestId,event,outcome,stake,String(body.note||''),body.sessionId)},201);
   }
   if(url.pathname==='/api/reset'&&request.method==='POST'){if(body.confirmation!=='RESET')throw Error('Reset confirmation required');await store.reset(user,body.starting);return send({ok:true});}
   if(url.pathname==='/api/note'&&request.method==='POST'){await store.q('UPDATE bets SET note=? WHERE id=? AND user_id=?',String(body.note||'').slice(0,2000),body.id,user).run();return send({ok:true});}
-  if(url.pathname==='/api/export'&&request.method==='GET')return send({exportedAt:new Date().toISOString(),...await store.snapshot(user),allBets:await store.all('SELECT * FROM bets WHERE user_id=?',user),transactions:await store.all('SELECT * FROM transactions WHERE user_id=?',user)});
+  if(url.pathname==='/api/export'&&request.method==='GET')return send({exportedAt:new Date().toISOString(),...await store.snapshot(user),allBets:await store.all('SELECT * FROM bets WHERE user_id=?',user),transactions:await store.all('SELECT * FROM transactions WHERE user_id=?',user),legs:await store.all('SELECT l.* FROM bet_legs l JOIN bets b ON b.id=l.bet_id WHERE b.user_id=?',user)});
   return json({error:'Not found'},404);
  }catch(e){const msg=String(e.message).replace(/^D1_ERROR: /,'').replace(/: SQLITE_CONSTRAINT.*$/,'');return json({error:/fetch failed/i.test(msg)?'Sports data connection failed. No bet was placed.':msg},400);}
 }

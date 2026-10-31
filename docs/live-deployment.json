@@ -1,0 +1,18 @@
+{
+  "version": "1.1.0",
+  "url": "https://paperbet-parks.diladiop.chatgpt.site",
+  "genuinePracticeEvent": "espn:20261031:401909897",
+  "oddsChangeStatus": 409,
+  "duplicateDebit": false,
+  "persistedBalance": 99900,
+  "settlement": {
+    "checkedAt": 1793477493334,
+    "checked": 0,
+    "remaining": 0,
+    "error": null,
+    "cadence": "Cloud task hourly; retries on next run; no browser required"
+  },
+  "liveFinalPayoutVerified": false,
+  "physicalIPhoneVerified": false,
+  "notes": "Genuine future event has not finished. Test account isolated from signed-in owner. No simulated live odds or results."
+}

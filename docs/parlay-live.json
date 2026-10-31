@@ -1,0 +1,20 @@
+{
+  "version": "1.2.0",
+  "genuineEvents": [
+    "espn:20261031:401909897",
+    "espn:20261031:401909898"
+  ],
+  "combinedOdds": 4.891851851851852,
+  "balance": 99900,
+  "legsPersisted": 2,
+  "duplicateDebits": false,
+  "explicitChangedOddsAcceptance": true,
+  "health": {
+    "checkedAt": 1793477924344,
+    "checked": 0,
+    "remaining": 0,
+    "error": null,
+    "cadence": "Cloud task hourly; retries on next run; no browser required"
+  },
+  "actualFuturePayoutVerified": false
+}

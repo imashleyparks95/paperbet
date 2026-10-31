@@ -4,12 +4,12 @@ Independent, mobile-first virtual-money sportsbook. No Little Big Arcade source,
 
 ## Current delivery status
 
-The existing application has been continued as **v1.1.0**, adding a separate owner-private Sites HTTPS deployment with Cloudflare Workers and durable D1 storage. The Node/SQLite edition is retained. No Little Big Arcade files, project, storage or deployment are involved.
+The existing application has been continued as **v1.2.0**, adding a separate owner-private Sites HTTPS deployment with Cloudflare Workers and durable D1 storage. The Node/SQLite edition is retained. No Little Big Arcade files, project, storage or deployment are involved.
 
 Live feed checks found and fixed two production adapter defects: NFL date-range requests fail, so fixtures are fetched by individual UTC day; odds arrays can contain null entries. Live access/coverage evidence is in `docs/live-coverage.json`; an actual ESPN final is in `docs/live-result.json`. These files are observations, never production input. No fallback odds/results are generated.
 
 See `docs/HOSTED_OPERATIONS.md` for hosted architecture, scheduler setup, privacy, migration and verification limits.
-## Run
+## Run the optional Node edition
 
 Requires Node.js 24 or later. No npm dependencies or installation required.
 
@@ -40,11 +40,15 @@ An optional documented provider adapter is retained for `DATA_PROVIDER=odds-api`
 
 Amounts are integer USD cents. Fractional-cent payouts round once to the nearest cent. Stakes debit on acceptance; winning total returns credit once; losses pay zero; confirmed voids refund the stake. Accepted decimal odds are immutable and American odds are derived for display. A unique per-user request ID and immediate SQLite transactions prevent double-tap deductions and repeated settlement payouts. Single bets have an immutable market JSON snapshot with team/outcome IDs and period rules, leaving space for future bet legs.
 
+On the hosted edition, normal visitors use Sites’ ChatGPT sign-in identity and durable D1 records; no separate PaperBet account is created. The following cookie/SQLite details describe the optional Node edition and identity-free service probes.
+
 Balances, sessions, transactions, bets, final result snapshots and reconciliation audit records live on the server. Each browser has a signed HttpOnly SameSite session cookie, Secure in production. No account is required. Other browsers receive isolated ledgers; cross-device account sync and self-service session recovery are not implemented. Clearing cookies loses access to that anonymous ledger. Safari/PWA cookie sharing varies by installation and iOS version and must be physically verified. Export records regularly. A JSON export is a data backup, not a login credential or an automated import feature.
 
 Starting a new session archives the old session. Open bets in old sessions continue to settle there. Current bankroll is available balance; open stakes are not treated as losses in performance metrics. ROI divides settled net profit by settled stakes and excludes voids. Win rate excludes void and unsettled bets. Filters apply to performance; bankroll history shows the full selected session and is labeled accordingly.
 
 ## Settlement and recovery
+
+Hosted edition: an independent hourly Sites cloud task calls the private settlement tool. This replaces the Node interval; checks can be delayed and no scheduler/feed SLA is claimed. Settings exposes the last persisted check. See the hosted operations/delivery reports for the recorded run status.
 
 The Node process checks eligible open/live/unresolved bets every five minutes and on startup. It runs without an open browser, **provided the host keeps the process running**. Only bets whose scheduled start has arrived are polled. ESPN event summaries are queried by stable provider event ID, including older events for outage recovery. Missing finals remain unresolved. Canceled, suspended, postponed and abandoned states do not automatically imply refunds: an administrator must verify the market's applicable void policy. Scheduling time alone never settles a bet.
 
@@ -73,6 +77,18 @@ The original Node/SQLite artifact is not a Worker. The new `npm run build:worker
 
 ## Verification limits
 
+Hosted production API checks passed for genuine upcoming NBA odds, odds-change rejection/explicit acceptance, a real $1 fictional-stake placement, duplicate request protection and persistent D1 readback. The service updater ran with no browser and persisted health. HTTPS manifest, service-worker and icon assets are available. The test account is separate from the owner’s signed-in ledger. These observations supersede the original local-only status below; they do not certify a future real-event payout or physical iPhone behavior.
+
 Automated tests cover mathematical payouts, persistence after DB reopen, win/loss/void processing, missing/postponed finals, soccer draw/period rules, NFL ties, stale price rejection, provider outage, request deduplication, odds changes, isolation, reset sessions, reconciliation and key-free feed parsing. API integration tests exercise real request handlers in-process so they run in environments restricting listening ports. Background settlement is invoked independently of any browser.
 
 No live-provider end-to-end bet or actual result settlement was claimed. Mobile Safari rendering, touch behavior, physical iPhone Home Screen install, cookie persistence between Safari/PWA contexts, HTTPS delivery and production scheduled uptime require deployment/device checks. Service workers cache only the application shell, never account APIs or prices; betting requires connectivity. Charts expose focusable points, but physical touch interaction needs verification.
+
+## Parlays (hosted v1.2.0)
+
+Choose a moneyline, tap **Add selection to parlay**, then choose another game. Review the persistent on-page parlay tray to remove picks, set one stake and place 2–8 legs. Picks remain while changing leagues within the open page; an unplaced slip is not a server-saved wager. The usual single-bet button remains available. The optional original Node edition remains single-only and hides the hosted parlay action.
+
+Only one selection per distinct event is permitted. Same-game parlays/correlated selections are not offered. PaperBet multiplies the genuine published decimal single-leg prices; this is its virtual practice payout, not a claim that any bookmaker offers that exact parlay price. Every leg is re-fetched at placement; a changed leg requires explicit acceptance of the updated ticket. Closed/unavailable legs reject the ticket without a debit. One atomic debit covers the full ticket; request IDs deduplicate the whole ticket.
+
+Each accepted leg stores its original event ID, league, period, selection, price and market snapshot in durable `bet_legs`. Any losing leg loses the ticket immediately. All remaining legs must finish before a win pays; voids count at 1.00, and all-void refunds the stake. Unknown/postponed/ambiguous results stay unresolved. Payout is rounded once at the ticket level. The existing background updater fetches actual results per leg, saves progress and pays the parent ticket once; it also recovers an interruption between saving the last final leg and aggregating its ticket. Archived-session returns stay archived. My Bets and JSON export include per-leg statuses.
+
+Eighteen automated tests pass, including independent parlay wins/losses, partial/ambiguous results, one/all voids, invalid same-game picks, atomic overspend rejection, duplicate placement/payouts, archived-session credit, crash recovery, rechecked prices and per-leg background polling. Production acceptance and remaining physical-browser verification are recorded in `docs/PARLAY_DELIVERY.md`.

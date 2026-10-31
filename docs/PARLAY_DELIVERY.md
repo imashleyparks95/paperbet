@@ -1,0 +1,15 @@
+# PaperBet v1.2.0 delivery
+
+Live URL: https://paperbet-parks.diladiop.chatgpt.site
+
+Added 2–8 distinct-game parlays, cross-league picks, one combined fictional stake, explicit changed-price acceptance, per-leg durable source snapshots and outcome progress, ticket-level payout/void rules and interruption recovery. Singles remain available. Same-game correlated pricing is not inferred. Multiplied published single prices are PaperBet virtual payout math, not bookmaker-quoted parlay prices.
+
+18 automated tests pass. Independent cases cover wins, immediate loss, missing/postponed results, one/all voids, duplicate debits/payouts, overspend rejection and atomic rollback, archived-session credits, interrupted aggregation recovery and every-leg verification/polling. A concurrent-settlement fixture initially exposed overlapping SQLite test transactions; the D1-shaped test adapter now serializes batches like the hosted database. Failed test attempts were not counted as passes.
+
+Production D1 migration 0002 succeeded without changing existing sessions, wagers or balances. `docs/parlay-live.json` records a genuine future NBA two-game $1 virtual parlay in an isolated service-cookie ledger. A deliberately outdated submitted leg price returned 409 without debit; accepting the freshly fetched prices placed the ticket. Retrying returned the original ticket, with $999.00 balance from $1,000.00 and two persisted legs. The background endpoint and actual installed PaperBet plugin tools passed, with fresh persisted health and no error. No invented odds/results or production fixtures were used.
+
+The independent hourly cloud task was saved and an immediate task run called the installed settlement and health tools successfully with a fresh checkedAt (1793477562163), no errors and no remaining due work. Subsequent direct plugin verification after the parlay deployment also passed. This verifies unattended access and execution, not long-term scheduler uptime or a genuine future-event payout. The test events have not finished. Deterministic tests cover the winning/losing/void payout paths; the actual live payout remains unverified until genuine final results arrive.
+
+HTTPS manifest/service-worker/icons are served. The cloud browser reached the private Site's ChatGPT sign-in screen and had no signed-in session. No physical iPhone, 390px rendering, touch/keyboard behavior, Home Screen installation, offline app activation or Safari/PWA sign-in sharing is certified. Mobile CSS includes 16px form fields, safe-area spacing and larger navigation targets. Authenticated browser testing remains a limitation; access was not weakened to bypass it.
+
+The original Node edition remains single-only; it hides the hosted parlay action. The hosted Worker is v1.2.0, uses persistent D1 and reuses the existing original UI/feed/domain code. Little Big Arcade was not modified. Source limitations remain visible in the app: undocumented key-free ESPN feeds can be delayed/unavailable; retrieved time does not guarantee bookmaker freshness; missing outcomes and exceptional rules remain unresolved.

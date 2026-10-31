@@ -5,7 +5,14 @@ export const leagues = [
  ...[['soccer_epl','Premier League'],['soccer_uefa_champs_league','Champions League'],['soccer_spain_la_liga','La Liga'],['soccer_germany_bundesliga','Bundesliga'],['soccer_italy_serie_a','Serie A'],['soccer_france_ligue_one','Ligue 1'],['soccer_usa_mls','MLS']].map(([k,n])=>[k,n,'Soccer','regulation_90'])
 ].map(([key,name,sport,period])=>({key,name,sport,period}));
 export function american(decimal) { return decimal>=2 ? Math.round((decimal-1)*100) : Math.round(-100/(decimal-1)); }
-export function returns(stake,decimal) { if(!Number.isSafeInteger(stake)||stake<=0||!Number.isFinite(decimal)||decimal<=1) throw Error('Invalid stake or odds');return Math.round(stake*decimal); }
+export function returns(stake,decimal) { if(!Number.isSafeInteger(stake)||stake<=0||!Number.isFinite(decimal)||decimal<=1) throw Error('Invalid stake or odds');const payout=Math.round(stake*decimal);if(!Number.isSafeInteger(payout))throw Error('Potential return exceeds supported limits');return payout; }
+export function parlayOdds(legs){if(!Array.isArray(legs)||legs.length<2||legs.length>8)throw Error('Choose 2–8 legs from different games');if(new Set(legs.map(l=>l.event_id||l.event?.id)).size!==legs.length)throw Error('Only one selection per game is allowed; same-game parlays are not supported');const price=legs.reduce((n,l)=>{const d=l.odds??l.outcome?.price;if(!Number.isFinite(d)||d<=1)throw Error('Invalid parlay odds');return n*d;},1);if(!Number.isFinite(price))throw Error('Invalid parlay odds');return price;}
+export function decideParlay(bet,legs){
+ if(legs.some(l=>l.status==='lost'))return {status:'lost',payout:0};
+ if(legs.some(l=>!['won','void'].includes(l.status)))return null;
+ const remaining=legs.filter(l=>l.status==='won');if(!remaining.length)return {status:'void',payout:bet.stake};
+ return {status:'won',payout:returns(bet.stake,remaining.reduce((n,l)=>n*l.odds,1))};
+}
 export function stakeCents(value){ if(!/^(?:0|[1-9]\d{0,7})(?:\.\d{1,2})?$/.test(String(value))) throw Error('Enter a valid amount with at most two decimals'); const cents=Math.round(Number(value)*100);if(cents<=0)throw Error('Stake must be positive');return cents; }
 // Unknown or ambiguous finals stay unresolved; no missing-result loss or time-based void.
 export function decide(bet,result){
